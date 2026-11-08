@@ -63,7 +63,7 @@ directions, including readable text on accent buttons.
 - `herdr-app check` covers mods, not theme files: validation here is JSON
   parsing plus `herdr-app status` showing empty `errors`.
 - The repo's `preview.png` is a real window shot (`herdr-app shot`), showing
-  the command palette over a diff on Atreyu.
+  the clean window on Atreyu: sidebar, agents, and a single terminal pane.
 
 ## Done when
 
