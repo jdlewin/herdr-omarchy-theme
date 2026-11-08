@@ -1,0 +1,68 @@
+{
+  "id": "root",
+  "type": "row",
+  "theme": "omarchy",
+  "preview": "layouts/omarchy.png",
+  "divider": { "width": 1, "color": "border" },
+  "children": [
+    {
+      "id": "sidebar",
+      "type": "column",
+      "size": { "px": 268 },
+      "min": 44,
+      "max": 480,
+      "background": "chrome",
+      "divider": { "width": 1, "color": "border" },
+      "children": [
+        {
+          "id": "spaces",
+          "type": "block",
+          "content": { "mod": "spaces" },
+          "size": { "weight": 1 },
+          "min": 90
+        },
+        {
+          "id": "agents",
+          "type": "block",
+          "content": { "mod": "agents" },
+          "size": { "weight": 1 },
+          "min": 90
+        }
+      ]
+    },
+    {
+      "id": "work",
+      "type": "column",
+      "children": [
+        {
+          "id": "tabs",
+          "type": "block",
+          "content": { "mod": "tabs" },
+          "size": { "px": 42 },
+          "window_drag": true
+        },
+        {
+          "id": "main",
+          "type": "block",
+          "content": {
+            "tab": "active",
+            "pane": {
+              "header": {
+                "content": { "mod": "pane" },
+                "reveal": "always",
+                "height": 30,
+                "position": "top"
+              },
+              "background": "background",
+              "border": { "width": 1, "color": "border" },
+              "focus": { "width": 1, "color": "accent" },
+              "radius": 10,
+              "gap": 8,
+              "lone": true
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,163 @@
+#!/bin/bash
+# Regenerate the herdr 'omarchy' theme from the active Omarchy palette.
+#
+# Omarchy runs every file in theme-set.d through bash (shebangs are
+# ignored), so this stays a bash script and hands the real work to python3.
+# The theme slug arrives in $1 and is ignored: the staged theme under
+# ~/.local/state is always the source of truth. Safe to run by hand too.
+
+THEME_SLUG=${1:-manual}
+export OMARCHY_THEME_SLUG="$THEME_SLUG"
+export PATH="/usr/share/omarchy/bin:$PATH"
+
+python3 - <<'PYEOF'
+"""Rewrite ~/.config/herdr-app/themes/omarchy.json from the Omarchy palette."""
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+
+HOME = os.path.expanduser("~")
+HERDR_HOME = os.path.join(HOME, ".config/herdr-app")
+THEME_NAME = "omarchy"
+THEME_FILE = os.path.join(HERDR_HOME, "themes", THEME_NAME + ".json")
+
+
+def run(*cmd):
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+
+
+def palette():
+    p = run("omarchy-theme-color", "--all")
+    if p.returncode != 0:
+        sys.exit(f"omarchy-theme-color --all failed: {p.stderr.strip()}")
+    out = {}
+    for line in p.stdout.splitlines():
+        if "\t" in line:
+            k, v = line.split("\t", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def pick(p, *keys):
+    for k in keys:
+        v = p.get(k, "")
+        if v and v.startswith("#") and len(v) == 7:
+            return v
+    return None
+
+
+def build(p):
+    dark = p.get("mode", "dark") != "light"
+    base = ["background", "red", "green", "yellow", "blue",
+            "magenta", "cyan", "foreground"]
+    brights = ["bright_red", "bright_green", "bright_yellow",
+               "bright_blue", "bright_magenta", "bright_cyan"]
+    ansi = []
+    for i in range(16):
+        if i < 8:
+            ansi.append(pick(p, f"color{i}", base[i]) or "#808080")
+        elif i == 8:
+            ansi.append(pick(p, "color8", "muted", base[0]) or "#808080")
+        elif i == 15:
+            ansi.append(pick(p, "color15", "bright_foreground",
+                             "light_foreground", base[7]) or "#ffffff")
+        else:
+            ansi.append(pick(p, f"color{i}", brights[i - 9]) or "#808080")
+
+    bg = pick(p, "background") or "#1a1b26"
+    fg = pick(p, "foreground") or "#a9b1d6"
+    accent = pick(p, "accent", "orange", "yellow") or "#7aa2f7"
+    # Text drawn on the accent: dark ink on bright accents, pale on dark ones.
+    on_accent = (pick(p, "darker_background", "dark_background", "background")
+                 if dark else
+                 pick(p, "bright_foreground", "light_foreground", "foreground"))
+    working = pick(p, "yellow", "orange") or accent
+    blocked = pick(p, "red") or accent
+    done = pick(p, "green") or accent
+    idle = pick(p, "muted", "dark_foreground") or fg
+    selection = pick(p, "selection_background", "selection") or bg
+
+    # Panel tones (canvas/chrome/surface/...) are deliberately left out so
+    # herdr derives them from `background` itself: that derivation already
+    # handles light and dark appearances.
+    return {
+        "background": bg,
+        "foreground": fg,
+        "selection": selection,
+        "cursor": pick(p, "cursor", "bright_foreground",
+                       "light_foreground", "foreground") or fg,
+        "ansi": ansi,
+        "colors": {
+            "background": bg,
+            "foreground": fg,
+            "muted": pick(p, "muted") or fg,
+            "dim": pick(p, "dark_foreground", "muted") or fg,
+            "accent": accent,
+            "accent_foreground": on_accent or bg,
+            "solid": accent,
+            "solid_foreground": on_accent or bg,
+            "selection": selection,
+            "working": working,
+            "blocked": blocked,
+            "done": done,
+            "idle": idle,
+            "unknown": idle,
+        },
+    }
+
+
+def theme_is_ours(theme):
+    if theme == THEME_NAME:
+        return True
+    return isinstance(theme, dict) and THEME_NAME in theme.values()
+
+
+def theme_is_active():
+    """True if the shown layout or settings currently ask for our theme."""
+    try:
+        shared = json.load(open(os.path.join(HERDR_HOME, "shared.json")))
+        layout = shared.get("layout")
+        if layout:
+            try:
+                state = json.load(open(os.path.join(
+                    HERDR_HOME, "layouts", ".state", layout + ".json")))
+                if theme_is_ours(state.get("theme")):
+                    return True
+            except (OSError, ValueError):
+                pass
+            root = json.load(open(os.path.join(
+                HERDR_HOME, "layouts", layout + ".json")))
+            if theme_is_ours(root.get("theme")):
+                return True
+    except (OSError, ValueError):
+        pass
+    try:
+        settings = json.load(open(os.path.join(HERDR_HOME, "settings.json")))
+        if theme_is_ours(settings.get("theme")):
+            return True
+    except (OSError, ValueError):
+        pass
+    return False
+
+
+def main():
+    theme = build(palette())
+    tmp = THEME_FILE + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(theme, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, THEME_FILE)
+
+    herdr_app = shutil.which("herdr-app") or os.path.join(
+        HOME, ".local/bin/herdr-app")
+    if theme_is_active() and os.access(herdr_app, os.X_OK):
+        r = run(herdr_app, "do", "app.theme", "--name", THEME_NAME)
+        if r.returncode != 0:
+            sys.exit(f"herdr-app do app.theme failed: {r.stderr.strip()}")
+
+
+main()
+PYEOF
